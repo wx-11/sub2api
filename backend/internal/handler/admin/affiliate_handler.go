@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -41,6 +43,36 @@ func (h *AffiliateHandler) ListUsers(c *gin.Context) {
 		return
 	}
 	response.Paginated(c, entries, total, page, pageSize)
+}
+
+type AffiliateUserSettingsResponse struct {
+	UserID               int64    `json:"user_id"`
+	AffCode              string   `json:"aff_code"`
+	AffCodeCustom        bool     `json:"aff_code_custom"`
+	AffRebateRatePercent *float64 `json:"aff_rebate_rate_percent,omitempty"`
+}
+
+// GetUserSettings returns a single user's current affiliate settings.
+// GET /api/v1/admin/affiliates/users/:user_id
+func (h *AffiliateHandler) GetUserSettings(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user_id")
+		return
+	}
+
+	summary, err := h.affiliateService.EnsureUserAffiliate(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, AffiliateUserSettingsResponse{
+		UserID:               summary.UserID,
+		AffCode:              summary.AffCode,
+		AffCodeCustom:        summary.AffCodeCustom,
+		AffRebateRatePercent: summary.AffRebateRatePercent,
+	})
 }
 
 // UpdateUserSettings updates a user's affiliate settings.
@@ -176,19 +208,62 @@ type AffiliateUserSummary struct {
 // LookupUsers searches users by email/username for the "add custom user" modal.
 // GET /api/v1/admin/affiliates/users/lookup?q=
 func (h *AffiliateHandler) LookupUsers(c *gin.Context) {
-	keyword := c.Query("q")
+	keyword := strings.TrimSpace(c.Query("q"))
 	if keyword == "" {
 		response.Success(c, []AffiliateUserSummary{})
 		return
 	}
-	users, _, err := h.adminService.ListUsers(c.Request.Context(), 1, 20, service.UserListFilters{Search: keyword}, "email", "asc")
+
+	filters := service.UserListFilters{Search: keyword}
+
+	result := make([]AffiliateUserSummary, 0, 20)
+	seen := make(map[int64]struct{}, 20)
+	appendUser := func(id int64, email, username string) {
+		if id <= 0 {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		result = append(result, AffiliateUserSummary{
+			ID:       id,
+			Email:    email,
+			Username: username,
+		})
+	}
+
+	if userID, err := strconv.ParseInt(keyword, 10, 64); err == nil && userID > 0 {
+		if user, getErr := h.adminService.GetUser(c.Request.Context(), userID); getErr == nil && user != nil {
+			appendUser(user.ID, user.Email, user.Username)
+		}
+	}
+
+	users, _, err := h.adminService.ListUsers(c.Request.Context(), 1, 100, filters, "email", "asc")
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	result := make([]AffiliateUserSummary, len(users))
-	for i, u := range users {
-		result[i] = AffiliateUserSummary{ID: u.ID, Email: u.Email, Username: u.Username}
+	sort.SliceStable(users, func(i, j int) bool {
+		return affiliateLookupPriority(users[i], keyword) < affiliateLookupPriority(users[j], keyword)
+	})
+	for _, u := range users {
+		appendUser(u.ID, u.Email, u.Username)
 	}
 	response.Success(c, result)
+}
+
+func affiliateLookupPriority(user service.User, keyword string) int {
+	trimmed := strings.TrimSpace(keyword)
+	if trimmed == "" {
+		return 3
+	}
+	switch {
+	case strings.EqualFold(strings.TrimSpace(user.Email), trimmed):
+		return 0
+	case strings.EqualFold(strings.TrimSpace(user.Username), trimmed):
+		return 1
+	default:
+		return 2
+	}
 }

@@ -135,6 +135,9 @@ export interface AffiliateInvitee {
 export interface UserAffiliateDetail {
   user_id: number
   aff_code: string
+  aff_rebate_rate_percent?: number | null
+  effective_rebate_rate_percent: number
+  global_rebate_rate_percent: number
   inviter_id?: number | null
   aff_count: number
   aff_quota: number

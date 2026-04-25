@@ -4,11 +4,113 @@ package service
 
 import (
 	"context"
+	"errors"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+type affiliateTestRepo struct {
+	summary  *AffiliateSummary
+	invitees []AffiliateInvitee
+}
+
+func (r *affiliateTestRepo) EnsureUserAffiliate(ctx context.Context, userID int64) (*AffiliateSummary, error) {
+	if r.summary == nil {
+		return nil, ErrAffiliateProfileNotFound
+	}
+	return r.summary, nil
+}
+
+func (r *affiliateTestRepo) GetAffiliateByCode(ctx context.Context, code string) (*AffiliateSummary, error) {
+	return nil, ErrAffiliateProfileNotFound
+}
+
+func (r *affiliateTestRepo) BindInviter(ctx context.Context, userID, inviterID int64) (bool, error) {
+	return false, nil
+}
+
+func (r *affiliateTestRepo) AccrueQuota(ctx context.Context, inviterID, inviteeUserID int64, amount float64) (bool, error) {
+	return false, nil
+}
+
+func (r *affiliateTestRepo) TransferQuotaToBalance(ctx context.Context, userID int64) (float64, float64, error) {
+	return 0, 0, nil
+}
+
+func (r *affiliateTestRepo) ListInvitees(ctx context.Context, inviterID int64, limit int) ([]AffiliateInvitee, error) {
+	return r.invitees, nil
+}
+
+func (r *affiliateTestRepo) UpdateUserAffCode(ctx context.Context, userID int64, newCode string) error {
+	return nil
+}
+
+func (r *affiliateTestRepo) ResetUserAffCode(ctx context.Context, userID int64) (string, error) {
+	return "", nil
+}
+
+func (r *affiliateTestRepo) SetUserRebateRate(ctx context.Context, userID int64, ratePercent *float64) error {
+	return nil
+}
+
+func (r *affiliateTestRepo) BatchSetUserRebateRate(ctx context.Context, userIDs []int64, ratePercent *float64) error {
+	return nil
+}
+
+func (r *affiliateTestRepo) ListUsersWithCustomSettings(ctx context.Context, filter AffiliateAdminFilter) ([]AffiliateAdminEntry, int64, error) {
+	return nil, 0, nil
+}
+
+type affiliateTestSettingRepo map[string]string
+
+func (r affiliateTestSettingRepo) Get(ctx context.Context, key string) (*Setting, error) {
+	value, ok := r[key]
+	if !ok {
+		return nil, ErrSettingNotFound
+	}
+	return &Setting{Key: key, Value: value}, nil
+}
+
+func (r affiliateTestSettingRepo) GetValue(ctx context.Context, key string) (string, error) {
+	value, ok := r[key]
+	if !ok {
+		return "", errors.New("setting not found")
+	}
+	return value, nil
+}
+
+func (r affiliateTestSettingRepo) Set(ctx context.Context, key, value string) error {
+	return nil
+}
+
+func (r affiliateTestSettingRepo) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+	out := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := r[key]; ok {
+			out[key] = value
+		}
+	}
+	return out, nil
+}
+
+func (r affiliateTestSettingRepo) SetMultiple(ctx context.Context, settings map[string]string) error {
+	return nil
+}
+
+func (r affiliateTestSettingRepo) GetAll(ctx context.Context) (map[string]string, error) {
+	out := make(map[string]string, len(r))
+	for key, value := range r {
+		out[key] = value
+	}
+	return out, nil
+}
+
+func (r affiliateTestSettingRepo) Delete(ctx context.Context, key string) error {
+	return nil
+}
 
 // TestResolveRebateRatePercent_PerUserOverride verifies that per-inviter
 // AffRebateRatePercent overrides the global rate, that NULL falls back to the
@@ -55,6 +157,79 @@ func TestIsEnabled_NilSettingServiceReturnsDefault(t *testing.T) {
 	svc := &AffiliateService{}
 	require.False(t, svc.IsEnabled(context.Background()))
 	require.Equal(t, AffiliateEnabledDefault, svc.IsEnabled(context.Background()))
+}
+
+func TestGetAffiliateDetail_IncludesEffectiveAndGlobalRate(t *testing.T) {
+	t.Parallel()
+
+	customRate := 33.3
+	now := time.Now().UTC()
+	svc := &AffiliateService{
+		repo: &affiliateTestRepo{
+			summary: &AffiliateSummary{
+				UserID:               1,
+				AffCode:              "VIP2026",
+				AffRebateRatePercent: &customRate,
+				AffCount:             2,
+				AffQuota:             12.5,
+				AffHistoryQuota:      45.6,
+				CreatedAt:            now,
+				UpdatedAt:            now,
+			},
+			invitees: []AffiliateInvitee{{
+				UserID:    2,
+				Email:     "alice@example.com",
+				Username:  "alice",
+				CreatedAt: &now,
+			}},
+		},
+		settingService: &SettingService{
+			settingRepo: affiliateTestSettingRepo{
+				SettingKeyAffiliateRebateRate: "18.8",
+			},
+		},
+	}
+
+	detail, err := svc.GetAffiliateDetail(context.Background(), 1)
+	require.NoError(t, err)
+	require.NotNil(t, detail)
+	require.NotNil(t, detail.AffRebateRatePercent)
+	require.InDelta(t, 33.3, *detail.AffRebateRatePercent, 1e-9)
+	require.InDelta(t, 33.3, detail.EffectiveRebateRatePercent, 1e-9)
+	require.InDelta(t, 18.8, detail.GlobalRebateRatePercent, 1e-9)
+	require.Len(t, detail.Invitees, 1)
+	require.Equal(t, "a***@e***.com", detail.Invitees[0].Email)
+}
+
+func TestGetAffiliateDetail_FallsBackToGlobalRate(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	svc := &AffiliateService{
+		repo: &affiliateTestRepo{
+			summary: &AffiliateSummary{
+				UserID:          1,
+				AffCode:         "DEFAULT01",
+				AffCount:        1,
+				AffQuota:        3,
+				AffHistoryQuota: 6,
+				CreatedAt:       now,
+				UpdatedAt:       now,
+			},
+		},
+		settingService: &SettingService{
+			settingRepo: affiliateTestSettingRepo{
+				SettingKeyAffiliateRebateRate: "27.5",
+			},
+		},
+	}
+
+	detail, err := svc.GetAffiliateDetail(context.Background(), 1)
+	require.NoError(t, err)
+	require.NotNil(t, detail)
+	require.Nil(t, detail.AffRebateRatePercent)
+	require.InDelta(t, 27.5, detail.EffectiveRebateRatePercent, 1e-9)
+	require.InDelta(t, 27.5, detail.GlobalRebateRatePercent, 1e-9)
 }
 
 // TestValidateExclusiveRate_BoundaryAndInvalid covers the validator used by

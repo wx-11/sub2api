@@ -3911,7 +3911,7 @@
                   </div>
                   <button
                     type="button"
-                    class="btn-primary btn-sm"
+                    class="btn btn-primary btn-sm"
                     @click="openAffiliateModal(null)"
                   >
                     + {{ t('admin.settings.features.affiliate.customUsers.addButton') }}
@@ -3929,7 +3929,7 @@
                   <button
                     v-if="affiliateState.selected.length > 0"
                     type="button"
-                    class="btn-secondary btn-sm"
+                    class="btn btn-secondary btn-sm"
                     @click="openAffiliateBatchModal"
                   >
                     {{ t('admin.settings.features.affiliate.customUsers.batchButton', { count: affiliateState.selected.length }) }}
@@ -3988,17 +3988,18 @@
                         </td>
                         <td class="px-3 py-2 text-sm">
                           <div class="flex items-center gap-2">
-                            <button class="text-primary-600 hover:underline" @click="openAffiliateModal(entry)">
+                            <button type="button" class="text-primary-600 hover:underline" @click.prevent="openAffiliateModal(entry)">
                               {{ t('common.edit') }}
                             </button>
                             <button
                               v-if="entry.aff_code_custom"
+                              type="button"
                               class="text-yellow-600 hover:underline"
-                              @click="resetAffiliateCode(entry)"
+                              @click.prevent="resetAffiliateCode(entry)"
                             >
                               {{ t('admin.settings.features.affiliate.customUsers.resetCode') }}
                             </button>
-                            <button class="text-red-600 hover:underline" @click="clearAffiliateUser(entry)">
+                            <button type="button" class="text-red-600 hover:underline" @click.prevent="clearAffiliateUser(entry)">
                               {{ t('common.delete') }}
                             </button>
                           </div>
@@ -4014,17 +4015,19 @@
                   </span>
                   <div class="flex items-center gap-2">
                     <button
-                      class="btn-secondary btn-sm"
+                      type="button"
+                      class="btn btn-secondary btn-sm"
                       :disabled="affiliateState.page <= 1"
-                      @click="changeAffiliatePage(affiliateState.page - 1)"
+                      @click.prevent="changeAffiliatePage(affiliateState.page - 1)"
                     >
                       {{ t('pagination.previous') }}
                     </button>
                     <span class="text-gray-500">{{ affiliateState.page }} / {{ Math.max(1, Math.ceil(affiliateState.total / affiliateState.pageSize)) }}</span>
                     <button
-                      class="btn-secondary btn-sm"
+                      type="button"
+                      class="btn btn-secondary btn-sm"
                       :disabled="affiliateState.page >= Math.ceil(affiliateState.total / affiliateState.pageSize)"
-                      @click="changeAffiliatePage(affiliateState.page + 1)"
+                      @click.prevent="changeAffiliatePage(affiliateState.page + 1)"
                     >
                       {{ t('pagination.next') }}
                     </button>
@@ -4036,12 +4039,13 @@
         </div>
 
         <!-- Affiliate add/edit modal -->
+        <Teleport to="body">
         <div
           v-if="affiliateModal.open"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           @click.self="closeAffiliateModal"
         >
-          <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-dark-900">
+          <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-dark-900" @click.stop>
             <h3 class="mb-4 text-lg font-semibold">
               {{ affiliateModal.mode === 'add' ? t('admin.settings.features.affiliate.modal.addTitle') : t('admin.settings.features.affiliate.modal.editTitle') }}
             </h3>
@@ -4062,21 +4066,32 @@
                     type="button"
                     class="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-800"
                     :class="{ 'bg-primary-50 dark:bg-primary-900/20': affiliateModal.selectedUser?.id === u.id }"
-                    @click="affiliateModal.selectedUser = u"
+                    @click.prevent.stop="selectAffiliateUser(u)"
                   >
-                    {{ u.email }} <span class="text-xs text-gray-500">({{ u.username }})</span>
+                    <div class="font-medium text-gray-900 dark:text-white">{{ u.email }}</div>
+                    <div class="mt-0.5 text-xs text-gray-500">
+                      {{ formatAffiliateSimpleUserMeta(u) }}
+                    </div>
                   </button>
                 </div>
-                <p v-if="affiliateModal.selectedUser" class="mt-1 text-xs text-gray-500">
-                  {{ t('admin.settings.features.affiliate.modal.selectedUser', { email: affiliateModal.selectedUser.email }) }}
-                </p>
+                <div
+                  v-if="affiliateModal.selectedUser"
+                  class="mt-2 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm dark:border-primary-900/40 dark:bg-primary-900/10"
+                >
+                  <div class="font-medium text-primary-700 dark:text-primary-300">
+                    {{ t('admin.settings.features.affiliate.modal.selectedUser', { email: affiliateModal.selectedUser.email }) }}
+                  </div>
+                  <div class="mt-1 text-xs text-primary-600/80 dark:text-primary-300/80">
+                    {{ formatAffiliateSimpleUserMeta(affiliateModal.selectedUser) }}
+                  </div>
+                </div>
               </div>
               <div v-else>
                 <label class="input-label">{{ t('admin.settings.features.affiliate.modal.userLabel') }}</label>
                 <input
                   type="text"
                   class="input"
-                  :value="affiliateModal.editingEntry ? affiliateModal.editingEntry.email : ''"
+                  :value="affiliateModalEditingUserDisplay"
                   disabled
                 />
               </div>
@@ -4091,7 +4106,7 @@
                   maxlength="32"
                 />
                 <p class="mt-1 text-xs text-gray-400">
-                  {{ t('admin.settings.features.affiliate.modal.codeHint') }}
+                  {{ affiliateModalCodeHint }}
                 </p>
               </div>
 
@@ -4110,34 +4125,36 @@
                   <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
                 </div>
                 <p class="mt-1 text-xs text-gray-400">
-                  {{ t('admin.settings.features.affiliate.modal.rateHint') }}
+                  {{ affiliateModalRateHint }}
                 </p>
               </div>
             </div>
 
             <div class="mt-6 flex justify-end gap-2">
-              <button type="button" class="btn-secondary" @click="closeAffiliateModal">
+              <button type="button" class="btn btn-secondary min-w-[88px]" @click.prevent.stop="closeAffiliateModal">
                 {{ t('common.cancel') }}
               </button>
               <button
                 type="button"
-                class="btn-primary"
-                :disabled="affiliateModal.saving"
-                @click="submitAffiliateModal"
+                class="btn btn-primary min-w-[88px]"
+                :disabled="affiliateModalSaveDisabled"
+                @click.prevent.stop="submitAffiliateModal"
               >
                 {{ affiliateModal.saving ? t('common.saving') : t('common.save') }}
               </button>
             </div>
           </div>
         </div>
+        </Teleport>
 
         <!-- Affiliate batch rate modal -->
+        <Teleport to="body">
         <div
           v-if="affiliateBatchModal.open"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           @click.self="affiliateBatchModal.open = false"
         >
-          <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-dark-900">
+          <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-dark-900" @click.stop>
             <h3 class="mb-4 text-lg font-semibold">
               {{ t('admin.settings.features.affiliate.batchModal.title', { count: affiliateState.selected.length }) }}
             </h3>
@@ -4160,20 +4177,21 @@
               {{ t('admin.settings.features.affiliate.batchModal.clearHint') }}
             </p>
             <div class="mt-6 flex justify-end gap-2">
-              <button type="button" class="btn-secondary" @click="affiliateBatchModal.open = false">
+              <button type="button" class="btn btn-secondary min-w-[88px]" @click.prevent.stop="affiliateBatchModal.open = false">
                 {{ t('common.cancel') }}
               </button>
               <button
                 type="button"
-                class="btn-primary"
+                class="btn btn-primary min-w-[88px]"
                 :disabled="affiliateBatchModal.saving"
-                @click="submitAffiliateBatchModal"
+                @click.prevent.stop="submitAffiliateBatchModal"
               >
                 {{ affiliateBatchModal.saving ? t('common.saving') : t('common.save') }}
               </button>
             </div>
           </div>
         </div>
+        </Teleport>
 
         </div><!-- /Tab: Features -->
 
@@ -7205,6 +7223,35 @@ const affiliateBatchModal = reactive({
   rate: "",
 });
 
+const affiliateModalCodeHint = computed(() =>
+  affiliateModal.mode === "add"
+    ? t("admin.settings.features.affiliate.modal.codeHintAdd")
+    : t("admin.settings.features.affiliate.modal.codeHintEdit"),
+);
+
+const affiliateModalRateHint = computed(() => {
+  if (affiliateModal.mode === "add") {
+    return t("admin.settings.features.affiliate.modal.rateHintAdd");
+  }
+  return affiliateModal.editingEntry?.aff_rebate_rate_percent != null
+    ? t("admin.settings.features.affiliate.modal.rateHintEditWithCustom")
+    : t("admin.settings.features.affiliate.modal.rateHintEditWithGlobal");
+});
+
+const affiliateModalSaveDisabled = computed(
+  () => affiliateModal.saving || (affiliateModal.mode === "add" && !affiliateModal.selectedUser),
+);
+
+const affiliateModalEditingUserDisplay = computed(() => {
+  if (!affiliateModal.editingEntry) return "";
+  const parts = [affiliateModal.editingEntry.email];
+  if (affiliateModal.editingEntry.username) {
+    parts.push(`@${affiliateModal.editingEntry.username}`);
+  }
+  parts.push(`ID: ${affiliateModal.editingEntry.user_id}`);
+  return parts.join(" · ");
+});
+
 // runAffiliateAction wraps the common confirm → call → toast → reload pattern
 // for row-level mutations (reset code, clear settings). Returns true on success.
 async function runAffiliateAction(confirmKey: string, fn: () => Promise<unknown>): Promise<boolean> {
@@ -7238,6 +7285,19 @@ function parseRebateRate(raw: string): number | null | undefined {
     return undefined;
   }
   return parsed;
+}
+
+function normalizeTextInput(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function formatAffiliateSimpleUserMeta(user: AffiliateSimpleUser): string {
+  const parts: string[] = [];
+  if (user.username) {
+    parts.push(`@${user.username}`);
+  }
+  parts.push(`ID: ${user.id}`);
+  return parts.join(" · ");
 }
 
 async function loadAffiliateUsers() {
@@ -7300,6 +7360,13 @@ function openAffiliateModal(entry: AffiliateAdminEntry | null) {
 
 function closeAffiliateModal() {
   affiliateModal.open = false;
+  affiliateModal.saving = false;
+  affiliateModal.userQuery = "";
+  affiliateModal.userResults = [];
+  affiliateModal.selectedUser = null;
+  affiliateModal.editingEntry = null;
+  affiliateModal.code = "";
+  affiliateModal.rate = "";
   if (affiliateModal.searchTimer != null) {
     window.clearTimeout(affiliateModal.searchTimer);
     affiliateModal.searchTimer = null;
@@ -7321,6 +7388,12 @@ function onAffiliateUserSearchInput() {
   });
 }
 
+function selectAffiliateUser(user: AffiliateSimpleUser) {
+  affiliateModal.selectedUser = user;
+  affiliateModal.userQuery = user.email;
+  affiliateModal.userResults = [];
+}
+
 async function submitAffiliateModal() {
   let userId: number;
   if (affiliateModal.mode === "add") {
@@ -7335,10 +7408,10 @@ async function submitAffiliateModal() {
   }
 
   const payload: Parameters<typeof affiliatesAPI.updateUserSettings>[1] = {};
-  const codeRaw = affiliateModal.code.trim();
+  const codeRaw = normalizeTextInput(affiliateModal.code);
   if (codeRaw) payload.aff_code = codeRaw.toUpperCase();
 
-  const rateInput = parseRebateRate(affiliateModal.rate.trim());
+  const rateInput = parseRebateRate(normalizeTextInput(affiliateModal.rate));
   if (rateInput === undefined) return; // toast already shown
   if (rateInput === null) {
     // Empty input only triggers a clear when editing a user that previously had a rate.
@@ -7393,7 +7466,7 @@ function openAffiliateBatchModal() {
 }
 
 async function submitAffiliateBatchModal() {
-  const rateInput = parseRebateRate(affiliateBatchModal.rate.trim());
+  const rateInput = parseRebateRate(normalizeTextInput(affiliateBatchModal.rate));
   if (rateInput === undefined) return;
   const userIDs = [...affiliateState.selected];
   const payload: Parameters<typeof affiliatesAPI.batchSetRate>[0] =

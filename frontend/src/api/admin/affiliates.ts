@@ -17,6 +17,13 @@ export interface AffiliateAdminEntry {
   aff_count: number
 }
 
+export interface AffiliateUserSettings {
+  user_id: number
+  aff_code: string
+  aff_code_custom: boolean
+  aff_rebate_rate_percent?: number | null
+}
+
 export interface ListAffiliateUsersParams {
   page?: number
   page_size?: number
@@ -67,6 +74,15 @@ export async function lookupUsers(q: string): Promise<SimpleUser[]> {
   return data
 }
 
+export async function getUserSettings(
+  userId: number,
+): Promise<AffiliateUserSettings> {
+  const { data } = await apiClient.get<AffiliateUserSettings>(
+    `/admin/affiliates/users/${userId}`,
+  )
+  return data
+}
+
 export async function updateUserSettings(
   userId: number,
   payload: UpdateAffiliateUserRequest,
@@ -109,6 +125,7 @@ export async function batchSetRate(
 export const affiliatesAPI = {
   listUsers,
   lookupUsers,
+  getUserSettings,
   updateUserSettings,
   clearUserSettings,
   resetUserCode,

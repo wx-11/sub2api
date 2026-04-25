@@ -8,7 +8,7 @@
       </div>
 
       <template v-else-if="detail">
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div class="card p-5">
             <p class="text-sm text-gray-500 dark:text-dark-400">{{ t('affiliate.stats.invitedUsers') }}</p>
             <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">
@@ -25,6 +25,19 @@
             <p class="text-sm text-gray-500 dark:text-dark-400">{{ t('affiliate.stats.totalQuota') }}</p>
             <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">
               {{ formatCurrency(detail.aff_history_quota) }}
+            </p>
+          </div>
+          <div class="card p-5">
+            <p class="text-sm text-gray-500 dark:text-dark-400">{{ t('affiliate.stats.rebateRate') }}</p>
+            <p class="mt-2 text-2xl font-semibold text-primary-600 dark:text-primary-400">
+              {{ formatRate(detail.effective_rebate_rate_percent) }}%
+            </p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+              {{
+                detail.aff_rebate_rate_percent != null
+                  ? t('affiliate.stats.customRate')
+                  : t('affiliate.stats.globalRate', { rate: formatRate(detail.global_rebate_rate_percent) })
+              }}
             </p>
           </div>
         </div>
@@ -151,6 +164,13 @@ const inviteLink = computed(() => {
 
 function formatCount(value: number): string {
   return value.toLocaleString()
+}
+
+function formatRate(value: number): string {
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
 }
 
 async function loadAffiliateDetail(silent = false): Promise<void> {

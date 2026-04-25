@@ -987,7 +987,10 @@ export default {
     stats: {
       invitedUsers: 'Invited Users',
       availableQuota: 'Available Rebate Quota',
-      totalQuota: 'Historical Rebate Quota'
+      totalQuota: 'Historical Rebate Quota',
+      rebateRate: 'Current Rebate Rate',
+      customRate: 'Using custom per-user rate',
+      globalRate: 'Following global rate: {rate}%'
     },
     transfer: {
       title: 'Transfer Rebate Quota',
@@ -1663,7 +1666,11 @@ export default {
       form: {
         rpmLimit: 'Requests Per Minute (RPM)',
         rpmLimitPlaceholder: '0 = unlimited',
-        rpmLimitHint: 'Max requests per minute for this user; 0 = unlimited. Acts as a fallback only when the group has no rpm_limit set.'
+        rpmLimitHint: 'Max requests per minute for this user; 0 = unlimited. Acts as a fallback only when the group has no rpm_limit set.',
+        affiliateRebateRate: 'Custom Rebate Rate',
+        affiliateRebateRatePlaceholder: 'Leave empty to follow the global rebate rate',
+        affiliateRebateRateHint: 'Applies only to this user. Enter 0-100 to override; leave empty to fall back to the global rebate rate.',
+        affiliateRebateRateInvalid: 'Rebate rate must be between 0 and 100'
       },
       columns: {
         user: 'User',
@@ -4790,7 +4797,7 @@ export default {
             title: 'Per-User Overrides',
             description: 'Set a custom invite code or exclusive rebate rate for specific users. Lists only users that have an override applied.',
             addButton: 'Add Custom User',
-            searchPlaceholder: 'Search by email or username',
+            searchPlaceholder: 'Search by email, username, or ID',
             batchButton: 'Batch Set Rate ({count} selected)',
             empty: 'No users with custom affiliate settings yet',
             customBadge: 'custom',
@@ -4811,14 +4818,17 @@ export default {
             addTitle: 'Add Custom User',
             editTitle: 'Edit Custom Settings',
             userLabel: 'User',
-            userPlaceholder: 'Search by email or username',
+            userPlaceholder: 'Search by email, username, or ID',
             selectedUser: 'Selected: {email}',
             codeLabel: 'Custom Invite Code (optional)',
             codePlaceholder: 'e.g. VIP2026',
-            codeHint: '4-32 characters; A-Z, 0-9, underscore, dash. Leave empty to keep current. Input is upper-cased.',
+            codeHintAdd: '4-32 characters; A-Z, 0-9, underscore, dash. Leave empty to keep the user’s current invite code. Input is upper-cased.',
+            codeHintEdit: '4-32 characters; A-Z, 0-9, underscore, dash. Leave empty to keep current. Input is upper-cased.',
             rateLabel: 'Exclusive Rebate Rate (optional)',
             ratePlaceholder: 'e.g. 30',
-            rateHint: '0-100. Leave empty (in edit mode) to clear and fall back to the global rate.',
+            rateHintAdd: '0-100. Leave empty to follow the global rebate rate.',
+            rateHintEditWithCustom: '0-100. Leave empty to clear this custom rate and fall back to the global rate.',
+            rateHintEditWithGlobal: '0-100. This user is already following the global rate; leave empty to keep it unchanged.',
             errorNoUser: 'Please select a user first',
             errorBadRate: 'Please enter a number between 0 and 100',
             errorEmpty: 'Please provide at least one custom field',

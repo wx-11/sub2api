@@ -78,13 +78,16 @@ type AffiliateInvitee struct {
 }
 
 type AffiliateDetail struct {
-	UserID          int64              `json:"user_id"`
-	AffCode         string             `json:"aff_code"`
-	InviterID       *int64             `json:"inviter_id,omitempty"`
-	AffCount        int                `json:"aff_count"`
-	AffQuota        float64            `json:"aff_quota"`
-	AffHistoryQuota float64            `json:"aff_history_quota"`
-	Invitees        []AffiliateInvitee `json:"invitees"`
+	UserID                     int64              `json:"user_id"`
+	AffCode                    string             `json:"aff_code"`
+	AffRebateRatePercent       *float64           `json:"aff_rebate_rate_percent,omitempty"`
+	EffectiveRebateRatePercent float64            `json:"effective_rebate_rate_percent"`
+	GlobalRebateRatePercent    float64            `json:"global_rebate_rate_percent"`
+	InviterID                  *int64             `json:"inviter_id,omitempty"`
+	AffCount                   int                `json:"aff_count"`
+	AffQuota                   float64            `json:"aff_quota"`
+	AffHistoryQuota            float64            `json:"aff_history_quota"`
+	Invitees                   []AffiliateInvitee `json:"invitees"`
 }
 
 type AffiliateRepository interface {
@@ -164,14 +167,19 @@ func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64)
 	if err != nil {
 		return nil, err
 	}
+	globalRate := s.globalRebateRatePercent(ctx)
+	effectiveRate := s.resolveRebateRatePercent(ctx, summary)
 	return &AffiliateDetail{
-		UserID:          summary.UserID,
-		AffCode:         summary.AffCode,
-		InviterID:       summary.InviterID,
-		AffCount:        summary.AffCount,
-		AffQuota:        summary.AffQuota,
-		AffHistoryQuota: summary.AffHistoryQuota,
-		Invitees:        invitees,
+		UserID:                     summary.UserID,
+		AffCode:                    summary.AffCode,
+		AffRebateRatePercent:       summary.AffRebateRatePercent,
+		EffectiveRebateRatePercent: effectiveRate,
+		GlobalRebateRatePercent:    globalRate,
+		InviterID:                  summary.InviterID,
+		AffCount:                   summary.AffCount,
+		AffQuota:                   summary.AffQuota,
+		AffHistoryQuota:            summary.AffHistoryQuota,
+		Invitees:                   invitees,
 	}, nil
 }
 

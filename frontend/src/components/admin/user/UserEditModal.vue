@@ -49,6 +49,24 @@
         />
         <p class="input-hint">{{ t('admin.users.form.rpmLimitHint') }}</p>
       </div>
+      <div>
+        <label class="input-label">{{ t('admin.users.form.affiliateRebateRate') }}</label>
+        <div class="relative">
+          <input
+            v-model="affiliate.rate"
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            class="input pr-8"
+            :placeholder="t('admin.users.form.affiliateRebateRatePlaceholder')"
+          />
+          <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
+        </div>
+        <p class="input-hint">
+          {{ affiliate.loading ? t('common.loading') : t('admin.users.form.affiliateRebateRateHint') }}
+        </p>
+      </div>
       <UserAttributeForm v-model="form.customAttributes" :user-id="user?.id" />
     </form>
     <template #footer>
@@ -68,6 +86,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useClipboard } from '@/composables/useClipboard'
 import { adminAPI } from '@/api/admin'
+import { affiliatesAPI } from '@/api/admin/affiliates'
 import type { AdminUser, UserAttributeValuesMap } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import UserAttributeForm from '@/components/user/UserAttributeForm.vue'
@@ -79,11 +98,40 @@ const { t } = useI18n(); const appStore = useAppStore(); const { copyToClipboard
 
 const submitting = ref(false); const passwordCopied = ref(false)
 const form = reactive({ email: '', password: '', username: '', notes: '', concurrency: 1, rpm_limit: 0, customAttributes: {} as UserAttributeValuesMap })
+const affiliate = reactive({
+  loading: false,
+  rate: '',
+  initialRate: null as number | null,
+})
+let affiliateRequestSeq = 0
 
 watch(() => props.user, (u) => {
   if (u) {
     Object.assign(form, { email: u.email, password: '', username: u.username || '', notes: u.notes || '', concurrency: u.concurrency, rpm_limit: u.rpm_limit ?? 0, customAttributes: {} })
+    affiliate.rate = ''
+    affiliate.initialRate = null
     passwordCopied.value = false
+  }
+}, { immediate: true })
+
+watch(() => [props.show, props.user?.id] as const, async ([show, userID]) => {
+  if (!show || !userID) return
+  const requestID = ++affiliateRequestSeq
+  affiliate.loading = true
+  try {
+    const settings = await affiliatesAPI.getUserSettings(userID)
+    if (requestID !== affiliateRequestSeq) return
+    affiliate.initialRate = settings.aff_rebate_rate_percent ?? null
+    affiliate.rate = settings.aff_rebate_rate_percent != null ? String(settings.aff_rebate_rate_percent) : ''
+  } catch (e: any) {
+    if (requestID !== affiliateRequestSeq) return
+    affiliate.initialRate = null
+    affiliate.rate = ''
+    appStore.showError(e.response?.data?.detail || t('admin.users.failedToUpdate'))
+  } finally {
+    if (requestID === affiliateRequestSeq) {
+      affiliate.loading = false
+    }
   }
 }, { immediate: true })
 
@@ -97,6 +145,16 @@ const copyPassword = async () => {
     passwordCopied.value = true; setTimeout(() => passwordCopied.value = false, 2000)
   }
 }
+const parseAffiliateRate = (): number | null | undefined => {
+  const raw = String(affiliate.rate ?? '').trim()
+  if (!raw) return null
+  const parsed = Number(raw)
+  if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
+    appStore.showError(t('admin.users.form.affiliateRebateRateInvalid'))
+    return undefined
+  }
+  return parsed
+}
 const handleUpdateUser = async () => {
   if (!props.user) return
   if (!form.email.trim()) {
@@ -107,11 +165,24 @@ const handleUpdateUser = async () => {
     appStore.showError(t('admin.users.concurrencyMin'))
     return
   }
+  const affiliateRate = parseAffiliateRate()
+  if (affiliateRate === undefined) return
+
   submitting.value = true
   try {
     const data: any = { email: form.email, username: form.username, notes: form.notes, concurrency: form.concurrency, rpm_limit: form.rpm_limit }
     if (form.password.trim()) data.password = form.password.trim()
     await adminAPI.users.update(props.user.id, data)
+    const shouldUpdateAffiliate =
+      (affiliateRate === null && affiliate.initialRate !== null) ||
+      (affiliateRate !== null && affiliateRate !== affiliate.initialRate)
+    if (shouldUpdateAffiliate) {
+      if (affiliateRate === null) {
+        await affiliatesAPI.updateUserSettings(props.user.id, { clear_rebate_rate: true })
+      } else {
+        await affiliatesAPI.updateUserSettings(props.user.id, { aff_rebate_rate_percent: affiliateRate })
+      }
+    }
     if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(props.user.id, form.customAttributes)
     appStore.showSuccess(t('admin.users.userUpdated'))
     emit('success'); emit('close')
